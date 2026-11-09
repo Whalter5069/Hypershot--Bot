@@ -84,30 +84,34 @@ for (const [name, cmd] of securityCommandsCollection) {
 // ===========================
 // REGISTER SLASH COMMANDS
 // ===========================
-const botToken = process.env.TOKEN || (fs.existsSync("./config.json") ? require("./config.json").token : null);
+const botToken = process.env.TOKEN || process.env.DISCORD_TOKEN || process.env.BOT_TOKEN || (fs.existsSync("./config.json") ? require("./config.json").token : null);
 const botClientId = process.env.CLIENT_ID || (fs.existsSync("./config.json") ? require("./config.json").clientId : null);
 const botGuildId = process.env.GUILD_ID || (fs.existsSync("./config.json") ? require("./config.json").guildId : null);
 
-const rest = new REST({ version: "10" }).setToken(botToken);
+if (botToken && botClientId && botGuildId) {
+    const rest = new REST({ version: "10" }).setToken(botToken);
 
-(async () => {
-    try {
-        console.log("⏳ Registering slash commands...");
-        const commands = client.commands.map(cmd => cmd.data.toJSON());
+    (async () => {
+        try {
+            console.log("⏳ Registering slash commands...");
+            const commands = client.commands.map(cmd => cmd.data.toJSON());
 
-        await rest.put(
-            Routes.applicationGuildCommands(
-                botClientId,
-                botGuildId
-            ),
-            { body: commands }
-        );
+            await rest.put(
+                Routes.applicationGuildCommands(
+                    botClientId,
+                    botGuildId
+                ),
+                { body: commands }
+            );
 
-        console.log(`✅ ${commands.length} slash commands registered successfully.`);
-    } catch (err) {
-        console.error("❌ Slash register error:", err);
-    }
-})();
+            console.log(`✅ ${commands.length} slash commands registered successfully.`);
+        } catch (err) {
+            console.error("❌ Slash register error:", err);
+        }
+    })();
+} else {
+    console.warn("⚠️ [Config Warning] TOKEN, CLIENT_ID, or GUILD_ID missing in environment variables. Slash commands registration skipped.");
+}
 
 // ===========================
 // INTERACTION HANDLER
@@ -448,5 +452,14 @@ client.once(Events.ClientReady, () => {
 // ===========================
 // LOGIN
 // ===========================
-const loginToken = process.env.TOKEN || (fs.existsSync("./config.json") ? require("./config.json").token : null);
-client.login(loginToken);
+const loginToken = process.env.TOKEN || process.env.DISCORD_TOKEN || process.env.BOT_TOKEN || (fs.existsSync("./config.json") ? require("./config.json").token : null);
+
+if (!loginToken) {
+    console.error("❌ [FATAL ERROR] Discord Bot Token is missing in environment variables!");
+    console.error("👉 Please add the 'TOKEN' variable in your Railway Project Settings > Variables tab.");
+    process.exit(1);
+}
+
+client.login(loginToken).catch(err => {
+    console.error("❌ [Login Error]:", err.message);
+});
