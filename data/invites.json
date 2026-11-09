@@ -1,0 +1,18 @@
+{
+  "inviters": {
+    "602375410017239083": {
+      "regular": 4,
+      "left": 3,
+      "fake": 0,
+      "total": 1
+    }
+  },
+  "joined": {
+    "720367307821678592": {
+      "inviterId": "602375410017239083",
+      "code": "ZCRR9VGdT",
+      "joinedAt": 1792182577075,
+      "isFake": false
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "720367307821678592": {
+    "userId": "720367307821678592",
+    "start": 1769022412795,
+    "end": 1769022471892,
+    "reason": "test",
+    "status": "ended",
+    "duration": "1 minutes",
+    "endTime": "Thursday, 22 January 2026 at 01:07",
+    "approver": "602375410017239083"
+  },
+  "602375410017239083": {
+    "userId": "602375410017239083",
+    "start": 1768752633103,
+    "end": 1768752691673,
+    "reason": "Test",
+    "status": "ended",
+    "duration": "1 minutes",
+    "endTime": "Sunday, 18 January 2026 at 22:11",
+    "rejectedBy": "602375410017239083",
+    "approver": "720367307821678592"
+  }
+}

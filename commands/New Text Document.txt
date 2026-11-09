@@ -1,0 +1,27 @@
+divider2: "<a:divider2:1466849401896042598>",
+divider1: "<a:divider1:1466849437979770973>",
+
+  redcrownfire: "<a:redcrownfire:1466837802497868053>",
+:divider2: :divider2: :divider2: :divider2: :divider2: :divider2: :divider2: :divider2: :divider2: :divider2: :divider2: :divider2: :divider2: :divider2: :divider2: :divider2: :divider2: :divider2: :divider2: :divider2: :divider2: :divider2: :divider2: :divider2: :divider2: :divider2: :divider2: :divider2:
+
+
+:divider1: :divider1: :divider1: :divider1: :divider1: :divider1: :divider1: :divider1: :divider1: :divider1: :divider1: :divider1: :divider1: :divider1: :divider1: :divider1: :divider1: :divider1: :divider1: :divider1: :divider1: :divider1: :divider1: :divider1: :divider1: :divider1: :divider1: :divider1:       
+
+${emoji.divider1}${emoji.divider1}${emoji.divider1}${emoji.divider1}${emoji.divider1}${emoji.divider1}${emoji.divider1}${emoji.divider1}${emoji.divider1}${emoji.divider1}${emoji.divider1}${emoji.divider1}${emoji.divider1}${emoji.divider1}${emoji.divider1}${emoji.divider1}${emoji.divider1}${emoji.divider1}${emoji.divider1}${emoji.divider1}${emoji.divider1}
+
+${emoji.divider2}${emoji.divider2}${emoji.divider2}${emoji.divider2}${emoji.divider2}${emoji.divider2}${emoji.divider2}${emoji.divider2}${emoji.divider2}${emoji.divider2}${emoji.divider2}${emoji.divider2}${emoji.divider2}${emoji.divider2}${emoji.divider2}${emoji.divider2}${emoji.divider2}${emoji.divider2}${emoji.divider2}${emoji.divider2}${emoji.divider2}
+
+
+
+
+"1211355506099224757"
+"1068541260379467957"
+"1211354731398828086"
+"906039069384003595"
+"960030272756252682"
+"720367307821678592"
+"1154322219271454751"
+"983033917940592680"
+"906960757093204018"
+"1150474891963928676"
+"1212388469230276656"

@@ -1,0 +1,28 @@
+# Node dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Sensitive credentials & environment files
+.env
+config.json
+
+# Databases & runtime data
+security/security.db*
+*.db
+*.sqlite
+*.sqlite3
+
+# Archives & binaries
+*.rar
+*.zip
+*.tar.gz
+
+# Logs
+*.log
+logs/
+
+# Temporary / Scratch files
+scratch/
+.system_generated/

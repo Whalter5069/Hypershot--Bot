@@ -1,0 +1,58 @@
+[
+    {
+        "duration": "Permanent",
+        "bannedById": "2",
+        "isPermanent": true,
+        "bannedByName": "NX Management Team",
+        "discordId": "602375410017239083",
+        "banId": "#hs-B6399",
+        "reason": "due to suspicious combat skills.",
+        "status": "UNBANNED",
+        "identifiers": [
+            "license:cd5947df4adb63c770a3d4bc1feb04cdd141830a",
+            "discord:602375410017239083",
+            "fivem:1725078",
+            "license2:cd5947df4adb63c770a3d4bc1feb04cdd141830a",
+            "ip:26.243.102.33"
+        ],
+        "discordName": "BH | THINKA "
+    },
+    {
+        "duration": "30 days",
+        "expireAt": "2026-09-18 03:30:40 PM",
+        "bannedById": "602375410017239083",
+        "isPermanent": false,
+        "identifiers": [
+            "license:1efe61562d518be4125eebc0d57bd562c20a1614",
+            "discord:1098277830518906881",
+            "fivem:17964186",
+            "license2:1efe61562d518be4125eebc0d57bd562c20a1614",
+            "ip:26.191.106.110"
+        ],
+        "discordId": "1098277830518906881",
+        "banId": "#hs-B7678",
+        "reason": "TEST",
+        "status": "UNBANNED",
+        "bannedByName": "NX Management Team",
+        "expireEpoch": 1789723840,
+        "discordName": "cheeta6996"
+    },
+    {
+        "duration": "Permanent",
+        "bannedById": "10",
+        "isPermanent": true,
+        "bannedByName": "NX Management Team",
+        "discordId": "1009510456588783716",
+        "banId": "#hs-B8890",
+        "reason": "FUCK U BITCH",
+        "status": "UNBANNED",
+        "identifiers": [
+            "license:b9b58038260e4df0a84a77fe36688e8f1ee8e238",
+            "discord:1009510456588783716",
+            "fivem:15007642",
+            "license2:b9b58038260e4df0a84a77fe36688e8f1ee8e238",
+            "ip:26.142.166.217"
+        ],
+        "discordName": "BH l Ahadul"
+    }
+]
