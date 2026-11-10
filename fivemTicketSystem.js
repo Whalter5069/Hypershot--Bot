@@ -127,9 +127,9 @@ const restartScheduleFile = path.join(__dirname, 'restart_schedule.json');
 const statusStateFile = path.join(__dirname, 'status_state.json');
 const whitelistCountFile = path.join(__dirname, 'whitelist_count.json');
 const whitelistPanelsFile = path.join(__dirname, 'whitelist_panels.json');
-const localWindowsBansPath = 'e:/TEST/Hypershot Arena/NEXUS AREN 2.0/txData/Qbox_72E1BC.base/resources/[standalone]/HS-whitelist/bans.json';
-const localWindowsTxPath = 'e:/TEST/Hypershot Arena/NEXUS AREN 2.0/txData/default/data/playersDB.json';
-const localWindowsConfigPath = 'e:/TEST/Hypershot Arena/NEXUS AREN 2.0/txData/Qbox_72E1BC.base/resources/[standalone]/HS-whitelist/config.lua';
+const localWindowsBansPath = 'e:/TEST/Hypershot Arena/Hypershot AREN 2.0/txData/Qbox_72E1BC.base/resources/[standalone]/HS-whitelist/bans.json';
+const localWindowsTxPath = 'e:/TEST/Hypershot Arena/Hypershot AREN 2.0/txData/default/data/playersDB.json';
+const localWindowsConfigPath = 'e:/TEST/Hypershot Arena/Hypershot AREN 2.0/txData/Qbox_72E1BC.base/resources/[standalone]/HS-whitelist/config.lua';
 
 let serverStartTime = null;
 let lastStatusMessage = null;
@@ -743,7 +743,7 @@ function findNxWhitelistResourcePath() {
         'D:/BOT/hs-whitelist',
         'D:/BOT/host pvp/hs-whitelist',
         'D:/BOT/host pvp/HS-whitelist',
-        'e:/TEST/Hypershot Arena/NEXUS AREN 2.0/txData/Qbox_72E1BC.base/resources/[standalone]/HS-whitelist',
+        'e:/TEST/Hypershot Arena/Hypershot AREN 2.0/txData/Qbox_72E1BC.base/resources/[standalone]/HS-whitelist',
         path.join(__dirname, '../nx-whitelist'),
         path.join(__dirname, '..')
     ];
@@ -794,7 +794,7 @@ function getFiveMEndpoints(apiPath = '') {
 function findTxDataPlayersDBPath() {
     const candidates = [
         localWindowsTxPath,
-        'e:/TEST/Hypershot Arena/NEXUS AREN 2.0/txData/default/data/playersDB.json',
+        'e:/TEST/Hypershot Arena/Hypershot AREN 2.0/txData/default/data/playersDB.json',
         '/home/container/txData/default/data/playersDB.json'
     ];
     for (const c of candidates) {
@@ -1659,19 +1659,20 @@ function setupPrefixCommandHandler(client) {
             const { StringSelectMenuBuilder } = require('discord.js');
             const menuRow = new ActionRowBuilder().addComponents(
                 new StringSelectMenuBuilder()
-                    .setCustomId('main_menu').setPlaceholder('Select One')
+                    .setCustomId('main_menu').setPlaceholder('Select a ticket category')
                     .addOptions([
-                        { label: 'SUPPORT', value: 'Support', emoji: '📩' },
-                        { label: 'WHITELIST', value: 'Whitelist', emoji: '📝' },
-                        { label: 'ASK FOR POV', value: 'Ticket', emoji: '📸' }
+                        { label: 'SUPPORT', value: 'Support', description: 'General server support & inquiries', emoji: '📩' },
+                        { label: 'UNBAN APPEAL', value: 'Appeal', description: 'Submit an appeal for your ban', emoji: '⚖️' },
+                        { label: 'ASK FOR POV', value: 'Ticket', description: 'Request in-game combat POV', emoji: '📸' }
                     ])
             );
 
             const embed = new EmbedBuilder()
                 .setColor(0x2B2D31)
-                .setTitle('Ticket')
-                .setDescription('To create a ticket use the dropdown menu below')
-                .setFooter({ text: 'Hypershot Arena Management' });
+                .setTitle('🎫 Hypershot Arena — Support & Ticket System')
+                .setDescription('Need help, want to appeal a ban, or need to request a combat POV?\nSelect the appropriate category from the dropdown menu below:\n\n📩 **Support** — General server & game support\n⚖️ **Unban Appeal** — Submit a ban appeal\n📸 **Ask For POV** — Request combat POV clip')
+                .setFooter({ text: 'Hypershot Arena Management' })
+                .setTimestamp();
 
             await message.channel.send({ embeds: [embed], components: [menuRow] });
         }

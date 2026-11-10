@@ -3,6 +3,7 @@ const {
     TextInputStyle, ButtonBuilder, ButtonStyle, PermissionsBitField, MessageFlags, StringSelectMenuBuilder, OverwriteType
 } = require('discord.js');
 const transcript = require('discord-html-transcripts');
+const axios = require('axios');
 let config = require('./config.json');
 let activeConfigPath = './config.json';
 const fs = require('fs');
@@ -191,11 +192,12 @@ function getNextTicketNumber(client) {
 function getMainMenuRow() {
     return new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
-            .setCustomId('main_menu').setPlaceholder('Select One')
+            .setCustomId('main_menu')
+            .setPlaceholder('Select a ticket category')
             .addOptions([
-                { label: 'SUPPORT', value: 'Support', emoji: '📩' },
-                { label: 'WHITELIST', value: 'Whitelist', emoji: '📝' },
-                { label: 'ASK FOR POV', value: 'Ticket', emoji: '📸' }
+                { label: 'SUPPORT', value: 'Support', description: 'General server support & inquiries', emoji: '📩' },
+                { label: 'UNBAN APPEAL', value: 'Appeal', description: 'Submit an appeal for your ban', emoji: '⚖️' },
+                { label: 'ASK FOR POV', value: 'Ticket', description: 'Request in-game combat POV', emoji: '📸' }
             ])
     );
 }
@@ -257,12 +259,24 @@ module.exports = async (interaction, client) => {
     if (interaction.isStringSelectMenu() && interaction.customId === 'main_menu') {
         const type = interaction.values[0];
 
-        if (type === 'Whitelist') {
-            const modal = new ModalBuilder().setCustomId('wl_modal').setTitle('Whitelist Application');
+        if (type === 'Appeal' || type === 'Unban' || type === 'Unban_Appeal') {
+            const modal = new ModalBuilder().setCustomId('appeal_modal').setTitle('Unban Appeal Application');
             modal.addComponents(
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel("In City Name").setStyle(TextInputStyle.Short).setRequired(true)),
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('gang').setLabel("Gang Name").setStyle(TextInputStyle.Short).setRequired(true)),
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('steam').setLabel("Steam Profile Link").setStyle(TextInputStyle.Paragraph).setRequired(true))
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder().setCustomId('discord_name').setLabel("In City / Character Name").setStyle(TextInputStyle.Short).setPlaceholder("e.g. John Wick").setRequired(true)
+                ),
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder().setCustomId('player_id').setLabel("Discord ID / Steam Hex / License").setStyle(TextInputStyle.Short).setPlaceholder("Your Discord ID or Steam identifier").setRequired(true)
+                ),
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder().setCustomId('ban_staff').setLabel("Banning Admin / Staff (if known)").setStyle(TextInputStyle.Short).setPlaceholder("Staff name or Unknown").setRequired(false)
+                ),
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder().setCustomId('ban_reason').setLabel("Why were you banned?").setStyle(TextInputStyle.Paragraph).setPlaceholder("Explain what you were banned for").setRequired(true)
+                ),
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder().setCustomId('appeal_reason').setLabel("Why should you be unbanned?").setStyle(TextInputStyle.Paragraph).setPlaceholder("Explain why staff should lift your ban").setRequired(true)
+                )
             );
             await interaction.showModal(modal);
         } else if (type === 'Support') {
@@ -477,49 +491,148 @@ module.exports = async (interaction, client) => {
             await interaction.editReply({ content: '✅ Application submitted! Staff will review your application soon.' });
         }
 
-        if (interaction.customId === 'support_modal' || interaction.customId === 'pov_modal') {
+        if (interaction.customId === 'appeal_modal' || interaction.customId === 'support_modal' || interaction.customId === 'pov_modal') {
+            await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+
+            const isAppeal = interaction.customId === 'appeal_modal';
             const isPOV = interaction.customId === 'pov_modal';
             const ticketNum = getNextTicketNumber(client);
+
+            const botMember = interaction.guild.members.me;
             const permissionOverwrites = [
-                { id: interaction.guild.id, type: OverwriteType.Role, deny: [PermissionsBitField.Flags.ViewChannel] },
-                { id: interaction.user.id, type: OverwriteType.Member, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] }
+                {
+                    id: interaction.guild.id,
+                    type: OverwriteType.Role,
+                    deny: [PermissionsBitField.Flags.ViewChannel]
+                },
+                {
+                    id: interaction.user.id,
+                    type: OverwriteType.Member,
+                    allow: [
+                        PermissionsBitField.Flags.ViewChannel,
+                        PermissionsBitField.Flags.SendMessages,
+                        PermissionsBitField.Flags.ReadMessageHistory,
+                        PermissionsBitField.Flags.AttachFiles,
+                        PermissionsBitField.Flags.EmbedLinks
+                    ]
+                },
+                {
+                    id: botMember.id,
+                    type: OverwriteType.Member,
+                    allow: [
+                        PermissionsBitField.Flags.ViewChannel,
+                        PermissionsBitField.Flags.SendMessages,
+                        PermissionsBitField.Flags.ReadMessageHistory,
+                        PermissionsBitField.Flags.AttachFiles,
+                        PermissionsBitField.Flags.EmbedLinks,
+                        PermissionsBitField.Flags.ManageChannels
+                    ]
+                }
             ];
 
             for (const roleId of staffRoleIds) {
-                permissionOverwrites.push({
-                    id: roleId,
-                    type: OverwriteType.Role,
-                    allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages]
+                if (interaction.guild.roles.cache.has(roleId)) {
+                    permissionOverwrites.push({
+                        id: roleId,
+                        type: OverwriteType.Role,
+                        allow: [
+                            PermissionsBitField.Flags.ViewChannel,
+                            PermissionsBitField.Flags.SendMessages,
+                            PermissionsBitField.Flags.ReadMessageHistory,
+                            PermissionsBitField.Flags.AttachFiles,
+                            PermissionsBitField.Flags.EmbedLinks
+                        ]
+                    });
+                }
+            }
+
+            let channelPrefix = 'ticket';
+            if (isAppeal) channelPrefix = 'appeal';
+            else if (isPOV) channelPrefix = 'pov';
+
+            let ticketChannel;
+            const categoryId = config.tickets?.categoryId;
+            const targetCategory = categoryId ? interaction.guild.channels.cache.get(categoryId) : null;
+
+            try {
+                ticketChannel = await interaction.guild.channels.create({
+                    name: `${channelPrefix}-${ticketNum}`,
+                    parent: targetCategory ? categoryId : null,
+                    permissionOverwrites: permissionOverwrites
                 });
+            } catch (err) {
+                console.error("Error creating channel in category, retrying without parent:", err.message);
+                try {
+                    ticketChannel = await interaction.guild.channels.create({
+                        name: `${channelPrefix}-${ticketNum}`,
+                        permissionOverwrites: permissionOverwrites
+                    });
+                } catch (createErr) {
+                    console.error("Fatal error creating ticket channel:", createErr);
+                    return interaction.editReply({
+                        content: `❌ Failed to create ticket channel: ${createErr.message}. Please ensure the bot has 'Manage Channels' permission!`
+                    });
+                }
             }
 
-            const ticketChannel = await interaction.guild.channels.create({
-                name: `Ticket-${ticketNum}`, parent: config.tickets.categoryId,
-                permissionOverwrites: permissionOverwrites
-            });
+            let embed;
+            const buttonComponents = [
+                new ButtonBuilder().setCustomId('close_req').setLabel('Close').setStyle(ButtonStyle.Secondary).setEmoji('🔒')
+            ];
 
-            const embed = new EmbedBuilder().setTitle(isPOV ? '📸 POV Request' : '🛠️ Support Request').setColor(isPOV ? 0x3498DB : 0x2ECC71);
-            if (isPOV) {
-                embed.addFields(
-                    { name: 'User', value: `${interaction.user}`, inline: true },
-                    { name: 'In City Name', value: interaction.fields.getTextInputValue('discord_name'), inline: true },
-                    { name: 'Character Name', value: interaction.fields.getTextInputValue('char_name'), inline: true },
-                    { name: 'INCITY ID', value: interaction.fields.getTextInputValue('incity_id'), inline: true },
-                    { name: 'POV Reason', value: interaction.fields.getTextInputValue('reason') }
+            if (isAppeal) {
+                embed = new EmbedBuilder()
+                    .setTitle('⚖️ Unban Appeal Request')
+                    .setColor(0xF1C40F)
+                    .setDescription(`Welcome <@${interaction.user.id}>! Staff has received your Unban Appeal.\nPlease remain patient while staff reviews your case.`)
+                    .addFields(
+                        { name: '👤 Applicant', value: `${interaction.user} (\`${interaction.user.id}\`)`, inline: true },
+                        { name: '🏙️ In City Name', value: interaction.fields.getTextInputValue('discord_name') || 'N/A', inline: true },
+                        { name: '🆔 Player Identifier', value: interaction.fields.getTextInputValue('player_id') || 'N/A', inline: true },
+                        { name: '👮 Banning Staff', value: interaction.fields.getTextInputValue('ban_staff') || 'Unknown', inline: true },
+                        { name: '🚫 Reason for Ban', value: interaction.fields.getTextInputValue('ban_reason') || 'N/A' },
+                        { name: '📝 Reason for Appeal', value: interaction.fields.getTextInputValue('appeal_reason') || 'N/A' }
+                    )
+                    .setFooter({ text: 'Hypershot Arena Appeals • Click Close when resolved' })
+                    .setTimestamp();
+
+                buttonComponents.push(
+                    new ButtonBuilder().setCustomId(`appeal_approve_${interaction.user.id}`).setLabel('Approve Unban').setStyle(ButtonStyle.Success).setEmoji('✅'),
+                    new ButtonBuilder().setCustomId(`appeal_reject_${interaction.user.id}`).setLabel('Reject Appeal').setStyle(ButtonStyle.Danger).setEmoji('❌')
                 );
+            } else if (isPOV) {
+                embed = new EmbedBuilder()
+                    .setTitle('📸 POV Request')
+                    .setColor(0x3498DB)
+                    .setDescription(`Welcome <@${interaction.user.id}>! Staff has received your POV Request.`)
+                    .addFields(
+                        { name: 'User', value: `${interaction.user}`, inline: true },
+                        { name: 'In City Name', value: interaction.fields.getTextInputValue('discord_name'), inline: true },
+                        { name: 'Character Name', value: interaction.fields.getTextInputValue('char_name'), inline: true },
+                        { name: 'INCITY ID', value: interaction.fields.getTextInputValue('incity_id'), inline: true },
+                        { name: 'POV Reason', value: interaction.fields.getTextInputValue('reason') }
+                    )
+                    .setFooter({ text: 'Hypershot Arena Tickets • Click Close when resolved' })
+                    .setTimestamp();
             } else {
-                embed.addFields(
-                    { name: 'User', value: `${interaction.user}`, inline: true },
-                    { name: 'In City Name', value: interaction.fields.getTextInputValue('discord_name'), inline: true },
-                    { name: 'Issue', value: interaction.fields.getTextInputValue('issue') },
-                    { name: 'Steps Tried', value: interaction.fields.getTextInputValue('steps') || 'None' },
-                    { name: 'Additional Info', value: interaction.fields.getTextInputValue('extra') || 'None' }
-                );
+                embed = new EmbedBuilder()
+                    .setTitle('🛠️ Support Request')
+                    .setColor(0x2ECC71)
+                    .setDescription(`Welcome <@${interaction.user.id}>! Staff has received your Support Request.`)
+                    .addFields(
+                        { name: 'User', value: `${interaction.user}`, inline: true },
+                        { name: 'In City Name', value: interaction.fields.getTextInputValue('discord_name'), inline: true },
+                        { name: 'Issue', value: interaction.fields.getTextInputValue('issue') },
+                        { name: 'Steps Tried', value: interaction.fields.getTextInputValue('steps') || 'None' },
+                        { name: 'Additional Info', value: interaction.fields.getTextInputValue('extra') || 'None' }
+                    )
+                    .setFooter({ text: 'Hypershot Arena Tickets • Click Close when resolved' })
+                    .setTimestamp();
             }
 
-            const closeBtn = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('close_req').setLabel('Close').setStyle(ButtonStyle.Secondary).setEmoji('🔒'));
-            await ticketChannel.send({ content: staffMentions, embeds: [embed], components: [closeBtn] });
-            await interaction.reply({ content: `Ticket opened: ${ticketChannel}`, flags: [MessageFlags.Ephemeral] });
+            const actionRow = new ActionRowBuilder().addComponents(buttonComponents);
+            await ticketChannel.send({ content: `${interaction.user} ${staffMentions}`, embeds: [embed], components: [actionRow] });
+            await interaction.editReply({ content: `✅ Your ticket has been opened: ${ticketChannel}` });
         }
 
         if (interaction.customId.startsWith('reject_modal_')) {
@@ -535,6 +648,25 @@ module.exports = async (interaction, client) => {
             if (resultChan) await resultChan.send({ content: `<@${userId}>`, embeds: [rejectEmbed] });
             if (interaction.message) await interaction.message.delete().catch(() => { });
             await interaction.reply({ content: 'Application rejected.', flags: [MessageFlags.Ephemeral] });
+        }
+
+        if (interaction.customId.startsWith('appeal_reject_modal_')) {
+            const userId = interaction.customId.split('_')[3];
+            const reason = interaction.fields.getTextInputValue('reject_reason');
+
+            const rejectEmbed = new EmbedBuilder()
+                .setTitle('❌ Unban Appeal Rejected')
+                .setColor(0xED4245)
+                .setDescription(`The unban appeal for <@${userId}> has been **REJECTED** by Staff <@${interaction.user.id}>.`)
+                .addFields(
+                    { name: '👤 Member', value: `<@${userId}>`, inline: true },
+                    { name: '👮 Reviewer', value: `<@${interaction.user.id}>`, inline: true },
+                    { name: '📌 Reason', value: `\`\`\`${reason}\`\`\``, inline: false }
+                )
+                .setTimestamp();
+
+            await interaction.channel.send({ embeds: [rejectEmbed] });
+            await interaction.reply({ content: '✅ Appeal rejected.', flags: [MessageFlags.Ephemeral] });
         }
     }
 
@@ -637,6 +769,59 @@ module.exports = async (interaction, client) => {
             await interaction.showModal(modal);
         }
 
+        if (interaction.customId.startsWith('appeal_approve_')) {
+            const isStaff = (config.ownerId && interaction.user.id === config.ownerId) ||
+                (interaction.member && interaction.member.roles.cache.some(role => staffRoleIds.includes(role.id))) ||
+                (interaction.member && interaction.member.permissions.has(PermissionsBitField.Flags.Administrator));
+            if (!isStaff) {
+                return interaction.reply({ content: '❌ Only Staff can approve unban appeals!', flags: [MessageFlags.Ephemeral] });
+            }
+
+            await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+            const userId = interaction.customId.split('_')[2];
+            const targetMember = await interaction.guild.members.fetch(userId).catch(() => null);
+
+            // Remove ban role if exists
+            const banRoleId = config.security?.banRoleId || '1557090669338693666';
+            if (targetMember && banRoleId && targetMember.roles.cache.has(banRoleId)) {
+                await targetMember.roles.remove(banRoleId, `Unban Appeal Approved by ${interaction.user.tag}`).catch(() => {});
+            }
+
+            // Remove Discord ban if user was banned on Discord
+            await interaction.guild.bans.remove(userId, `Appeal Approved by ${interaction.user.tag}`).catch(() => {});
+
+            const approveEmbed = new EmbedBuilder()
+                .setTitle('✅ Unban Appeal Approved')
+                .setColor(0x2ECC71)
+                .setDescription(`The unban appeal for <@${userId}> has been **APPROVED** by Staff <@${interaction.user.id}>.`)
+                .addFields(
+                    { name: '👤 Member', value: `<@${userId}>`, inline: true },
+                    { name: '👮 Reviewer', value: `<@${interaction.user.id}>`, inline: true }
+                )
+                .setTimestamp();
+
+            await interaction.channel.send({ embeds: [approveEmbed] });
+            await interaction.editReply({ content: '✅ Appeal marked as approved!' });
+        }
+
+        if (interaction.customId.startsWith('appeal_reject_')) {
+            const isStaff = (config.ownerId && interaction.user.id === config.ownerId) ||
+                (interaction.member && interaction.member.roles.cache.some(role => staffRoleIds.includes(role.id))) ||
+                (interaction.member && interaction.member.permissions.has(PermissionsBitField.Flags.Administrator));
+            if (!isStaff) {
+                return interaction.reply({ content: '❌ Only Staff can reject unban appeals!', flags: [MessageFlags.Ephemeral] });
+            }
+
+            const userId = interaction.customId.split('_')[2];
+            const modal = new ModalBuilder().setCustomId(`appeal_reject_modal_${userId}`).setTitle('Reject Unban Appeal');
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder().setCustomId('reject_reason').setLabel("Rejection Reason").setStyle(TextInputStyle.Paragraph).setRequired(true)
+                )
+            );
+            await interaction.showModal(modal);
+        }
+
         if (interaction.customId === 'close_req') {
             const currentName = interaction.channel.name;
             if (currentName.toLowerCase().startsWith('closed-')) {
@@ -663,6 +848,10 @@ module.exports = async (interaction, client) => {
             let newName = currentName;
             if (currentName.toLowerCase().startsWith('ticket-')) {
                 newName = currentName.replace(/^ticket-/i, 'closed-');
+            } else if (currentName.toLowerCase().startsWith('appeal-')) {
+                newName = currentName.replace(/^appeal-/i, 'closed-appeal-');
+            } else if (currentName.toLowerCase().startsWith('pov-')) {
+                newName = currentName.replace(/^pov-/i, 'closed-pov-');
             } else {
                 newName = `closed-${currentName}`;
             }
@@ -747,7 +936,10 @@ module.exports = async (interaction, client) => {
                 }
             }
 
-            let restoredName = currentName.replace(/^closed-/i, 'Ticket-');
+            let restoredName = currentName
+                .replace(/^closed-appeal-/i, 'appeal-')
+                .replace(/^closed-pov-/i, 'pov-')
+                .replace(/^closed-/i, 'ticket-');
             await interaction.channel.setName(restoredName).catch(err => console.error('Failed to rename channel on reopen:', err));
 
             const reopenEmbed = new EmbedBuilder()

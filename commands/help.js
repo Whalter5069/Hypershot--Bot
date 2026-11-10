@@ -85,7 +85,7 @@ module.exports = {
         "🔓 **/unbanplayers** (or `!unbanplayers`) → FiveM arena unban",
         "ℹ️ **/baninfo** → Ban record details & identifiers",
         "📝 **/whitelist** (or `!whitelist`) → Whitelist verification panel",
-        "🎫 **/setup** (or `!setup-ticket`) → Support & Whitelist tickets panel",
+        "🎫 **/setup** (or `!setup-ticket`) → Support, Unban Appeal & POV tickets panel",
         "🔄 **/resetstrem** (or `!resetstrem`) → Reset user saved Steam profile",
         "🛠️ **/maintenance** → Server maintenance mode",
         "🧪 **/testmode** → Server test mode",
