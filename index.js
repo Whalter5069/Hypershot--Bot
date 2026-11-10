@@ -167,7 +167,7 @@ client.on(Events.InteractionCreate, async interaction => {
                     const response = await axios.post(`http://127.0.0.1:30120/fivem-npc-ui-1.0/approveCoin`, {
                         playerId: playerId,
                         amount: amount,
-                        secret: "NEXUS_SECRET_123"
+                        secret: "Hypershot_SECRET_123"
                     });
 
                     if (response.data && response.data.success) {
