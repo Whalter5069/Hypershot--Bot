@@ -646,52 +646,69 @@ async function initOrUpdateWhitelistPanel(client) {
             return;
         }
 
-        // Fetch recent messages in the whitelist channel
-        const recentMessages = await channel.messages.fetch({ limit: 25 }).catch(() => null);
         let existingMsg = null;
-        let oldForeignMsg = null;
 
-        if (recentMessages) {
-            // Find message authored by THIS current bot
-            existingMsg = recentMessages.find(m =>
-                m.author.id === client.user.id &&
-                m.embeds.length > 0 &&
-                m.embeds.some(e => e.title && e.title.toLowerCase().includes('whitelist'))
-            ) || null;
+        // 1. Check configured messageId if already stored
+        if (config.whitelist?.messageId) {
+            try {
+                existingMsg = channel.messages.cache.get(config.whitelist.messageId) ||
+                    await channel.messages.fetch(config.whitelist.messageId).catch(() => null);
+            } catch (e) {
+                existingMsg = null;
+            }
+        }
 
-            // Find any old whitelist message authored by another bot/user
-            oldForeignMsg = recentMessages.find(m =>
-                m.author.id !== client.user.id &&
-                m.embeds.length > 0 &&
-                m.embeds.some(e => e.title && e.title.toLowerCase().includes('whitelist'))
-            ) || null;
+        // 2. Check tracked panels from whitelist_panels.json
+        if (!existingMsg) {
+            try {
+                const panels = loadWhitelistPanels();
+                for (const p of panels) {
+                    if (p.channelId === targetChannelId && p.messageId) {
+                        const m = channel.messages.cache.get(p.messageId) ||
+                            await channel.messages.fetch(p.messageId).catch(() => null);
+                        if (m && m.embeds && m.embeds.some(e => e.title && e.title.toLowerCase().includes('whitelist'))) {
+                            existingMsg = m;
+                            break;
+                        }
+                    }
+                }
+            } catch (e) { }
+        }
+
+        // 3. Fallback: Search recent messages in the whitelist channel
+        if (!existingMsg) {
+            try {
+                const recentMessages = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+                if (recentMessages) {
+                    existingMsg = recentMessages.find(m =>
+                        m.embeds.length > 0 &&
+                        m.embeds.some(e => e.title && e.title.toLowerCase().includes('whitelist'))
+                    ) || null;
+                }
+            } catch (e) { }
         }
 
         const embed = buildWhitelistEmbed(client);
 
         if (existingMsg) {
-            // Update existing message
-            await existingMsg.edit({ embeds: [embed] }).catch(() => null);
+            // NEVER DELETE! Simply edit/update if authored by this bot
+            if (existingMsg.author && existingMsg.author.id === client.user.id) {
+                await existingMsg.edit({ embeds: [embed] }).catch(() => null);
+            }
+
+            // Ensure reaction is preserved
             const hasCheck = existingMsg.reactions.cache.some(r => r.emoji.name === '✅' && r.me);
             if (!hasCheck) {
                 await existingMsg.react('✅').catch(() => null);
             }
+
             trackWhitelistPanel(existingMsg);
             if (config.whitelist) {
                 config.whitelist.messageId = existingMsg.id;
             }
-            console.log(`✅ [Whitelist] Updated existing whitelist panel (${existingMsg.id}) in #${channel.name}`);
+            console.log(`✅ [Whitelist] Preserved and connected to existing whitelist panel (${existingMsg.id}) in #${channel.name}`);
         } else {
-            // No editable message from this bot exists
-            // Delete old foreign whitelist message if present
-            if (oldForeignMsg) {
-                try {
-                    await oldForeignMsg.delete().catch(() => null);
-                    console.log(`🗑️ [Whitelist] Deleted outdated whitelist panel (${oldForeignMsg.id}) from previous bot.`);
-                } catch (e) { }
-            }
-
-            // Instantly send fresh embed
+            // Absolutely no whitelist message exists in this channel -> Send fresh one
             const newMsg = await channel.send({ embeds: [embed] });
             await newMsg.react('✅').catch(() => null);
             trackWhitelistPanel(newMsg);
