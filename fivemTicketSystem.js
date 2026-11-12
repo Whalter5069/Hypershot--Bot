@@ -599,26 +599,115 @@ function readLocalWhitelistCount() {
 
 function buildWhitelistEmbed(client, localCount = 0) {
     const embed = new EmbedBuilder()
-        .setTitle("👑 Hypershot Arena — Whitelist Access 👑")
+        .setTitle("🛡️ Hypershot Arena | Whitelist Access")
         .setDescription(
-            "Welcome to **Hypershot Arena**! To play on our server, you must be whitelisted.\n\n" +
-            "✨ **How to get Whitelisted:**\n" +
-            "1️⃣ React with ✅ on this message to receive the **Whitelist** role instantly!\n" +
-            "2️⃣ Or use the button below to submit your official application.\n\n" +
+            "**Welcome to Hypershot Arena!** ⚔️\n\n" +
+            "To gain access to the server and start playing, you need to be whitelisted.\n\n" +
+            "📌 **How to get whitelisted?**\n" +
+            "React with **✅** below to instantly receive your whitelist role and server access!\n\n" +
             "⚠️ **Need Help?**\n" +
             "If you face any issues while getting whitelisted, please create a ticket or reach out to our staff!\n\n" +
             "*Thank you for joining us, see you in the Arena!*"
         )
         .setColor("#2ECC71")
         .setImage("https://media.discordapp.net/attachments/1328002952236892180/1560750415945932901/hypershot_arena_animated.gif")
-        .setThumbnail(client?.user ? client.user.displayAvatarURL({ dynamic: true }) : null);
-
-    embed.setFooter({
-        text: "Hypershot Arena • React ✅ for Whitelist",
-        iconURL: client?.user ? client.user.displayAvatarURL() : undefined
-    });
+        .setThumbnail(client?.user ? client.user.displayAvatarURL({ dynamic: true }) : null)
+        .setFooter({
+            text: "Hypershot Arena • React ✅ for Whitelist",
+            iconURL: client?.user ? client.user.displayAvatarURL() : undefined
+        });
 
     return embed;
+}
+
+let isWhitelistInitializing = false;
+
+async function initOrUpdateWhitelistPanel(client) {
+    if (!client || !client.isReady()) return;
+    if (isWhitelistInitializing) return;
+    isWhitelistInitializing = true;
+
+    try {
+        const targetChannelId = config.whitelist?.channelId || "1557102764734152894";
+        if (!targetChannelId) return;
+
+        let channel = client.channels.cache.get(targetChannelId);
+        if (!channel) {
+            try {
+                channel = await client.channels.fetch(targetChannelId);
+            } catch (err) {
+                console.warn(`⚠️ [Whitelist] Could not fetch channel ${targetChannelId}:`, err.message);
+                return;
+            }
+        }
+
+        if (!channel || !channel.isTextBased()) {
+            console.warn(`⚠️ [Whitelist] Channel ${targetChannelId} is not a valid text channel.`);
+            return;
+        }
+
+        // Fetch recent messages in the whitelist channel
+        const recentMessages = await channel.messages.fetch({ limit: 25 }).catch(() => null);
+        let existingMsg = null;
+        let oldForeignMsg = null;
+
+        if (recentMessages) {
+            // Find message authored by THIS current bot
+            existingMsg = recentMessages.find(m =>
+                m.author.id === client.user.id &&
+                m.embeds.length > 0 &&
+                m.embeds.some(e => e.title && e.title.toLowerCase().includes('whitelist'))
+            ) || null;
+
+            // Find any old whitelist message authored by another bot/user
+            oldForeignMsg = recentMessages.find(m =>
+                m.author.id !== client.user.id &&
+                m.embeds.length > 0 &&
+                m.embeds.some(e => e.title && e.title.toLowerCase().includes('whitelist'))
+            ) || null;
+        }
+
+        const embed = buildWhitelistEmbed(client);
+
+        if (existingMsg) {
+            // Update existing message
+            await existingMsg.edit({ embeds: [embed] }).catch(() => null);
+            const hasCheck = existingMsg.reactions.cache.some(r => r.emoji.name === '✅' && r.me);
+            if (!hasCheck) {
+                await existingMsg.react('✅').catch(() => null);
+            }
+            trackWhitelistPanel(existingMsg);
+            if (config.whitelist) {
+                config.whitelist.messageId = existingMsg.id;
+            }
+            console.log(`✅ [Whitelist] Updated existing whitelist panel (${existingMsg.id}) in #${channel.name}`);
+        } else {
+            // No editable message from this bot exists
+            // Delete old foreign whitelist message if present
+            if (oldForeignMsg) {
+                try {
+                    await oldForeignMsg.delete().catch(() => null);
+                    console.log(`🗑️ [Whitelist] Deleted outdated whitelist panel (${oldForeignMsg.id}) from previous bot.`);
+                } catch (e) { }
+            }
+
+            // Instantly send fresh embed
+            const newMsg = await channel.send({ embeds: [embed] });
+            await newMsg.react('✅').catch(() => null);
+            trackWhitelistPanel(newMsg);
+            if (config.whitelist) {
+                config.whitelist.messageId = newMsg.id;
+                try {
+                    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+                } catch (e) { }
+            }
+            console.log(`✅ [Whitelist] Sent fresh whitelist panel (${newMsg.id}) in #${channel.name}`);
+        }
+    } catch (err) {
+        console.error('❌ [Whitelist] Error in initOrUpdateWhitelistPanel:', err);
+    } finally {
+        isWhitelistInitializing = false;
+    }
 }
 
 async function refreshWhitelistReactors(client, message) {
@@ -674,32 +763,7 @@ async function refreshAllTrackedPanels(client) {
 }
 
 async function autoDiscoverWhitelistPanels(client) {
-    try {
-        const guild = client.guilds.cache.get(config.guildId) || client.guilds.cache.first();
-        if (!guild) return;
-
-        if (config.whitelist && config.whitelist.channelId) {
-            try {
-                const ch = guild.channels.cache.get(config.whitelist.channelId) || await client.channels.fetch(config.whitelist.channelId).catch(() => null);
-                if (ch && ch.isTextBased()) {
-                    if (config.whitelist.messageId) {
-                        const msg = ch.messages.cache.get(config.whitelist.messageId) || await ch.messages.fetch(config.whitelist.messageId).catch(() => null);
-                        if (msg) trackWhitelistPanel(msg);
-                    } else {
-                        const msgs = await ch.messages.fetch({ limit: 10 }).catch(() => null);
-                        if (msgs) {
-                            for (const [, m] of msgs) {
-                                if (m.embeds && m.embeds.some(e => e.title && e.title.toLowerCase().includes('whitelist'))) {
-                                    trackWhitelistPanel(m);
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            } catch (e) { }
-        }
-    } catch (e) { }
+    await initOrUpdateWhitelistPanel(client).catch(() => null);
 }
 
 // -----------------------------------------------------------------------------
@@ -1986,14 +2050,17 @@ function initFivemTicketSystem(client) {
         console.error("Error starting status service:", err);
     });
 
-    autoDiscoverWhitelistPanels(client).catch(() => { });
+    initOrUpdateWhitelistPanel(client).catch(err => {
+        console.error("Error starting whitelist panel:", err);
+    });
 
     setInterval(async () => {
         if (!client.isReady()) return;
         try {
+            await initOrUpdateWhitelistPanel(client).catch(() => null);
             await refreshAllTrackedPanels(client).catch(() => null);
         } catch (e) { }
-    }, 10000);
+    }, 15000);
 
     // Setup HTTP servers
     startHttpServers(client);
@@ -2007,6 +2074,8 @@ function initFivemTicketSystem(client) {
 
 module.exports = {
     initFivemTicketSystem,
+    initOrUpdateWhitelistPanel,
+    autoDiscoverWhitelistPanels,
     fetchServerStatus,
     buildWhitelistEmbed,
     getRestartDisplay,
