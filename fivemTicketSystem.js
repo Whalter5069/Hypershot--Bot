@@ -15,7 +15,8 @@ const {
     ButtonStyle,
     PermissionsBitField,
     ChannelSelectMenuBuilder,
-    ChannelType
+    ChannelType,
+    AuditLogEvent
 } = require('discord.js');
 
 let axios;
@@ -1553,6 +1554,57 @@ function setupReactionHandlers(client) {
             }
         } catch (err) {
             console.error('Reaction Remove Whitelist Error:', err);
+        }
+    });
+
+    // 🛡️ Whitelist Anti-Self-Assign & Anti-Onboarding Guard
+    client.on('guildMemberUpdate', async (oldMember, newMember) => {
+        try {
+            if (!newMember || !newMember.guild) return;
+            const wlRoleId = getWhitelistRoleId();
+            if (!wlRoleId) return;
+
+            const hadRole = oldMember.roles.cache.has(wlRoleId);
+            const hasRole = newMember.roles.cache.has(wlRoleId);
+
+            if (!hadRole && hasRole) {
+                // Verify if user actually reacted with ✅ on the official Whitelist embed
+                let hasValidReaction = false;
+                try {
+                    const chId = config.whitelist?.channelId || "1557102764734152894";
+                    const msgId = config.whitelist?.messageId;
+                    if (chId && msgId) {
+                        const ch = newMember.guild.channels.cache.get(chId) || await client.channels.fetch(chId).catch(() => null);
+                        if (ch) {
+                            const msg = ch.messages.cache.get(msgId) || await ch.messages.fetch(msgId).catch(() => null);
+                            if (msg) {
+                                const checkReaction = msg.reactions.cache.find(r => r.emoji.name === '✅');
+                                if (checkReaction) {
+                                    const users = await checkReaction.users.fetch().catch(() => null);
+                                    if (users && users.has(newMember.id)) {
+                                        hasValidReaction = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (e) { }
+
+                if (!hasValidReaction) {
+                    // Check audit log to see who assigned the role
+                    const audit = await newMember.guild.fetchAuditLogs({ limit: 1, type: AuditLogEvent.MemberRoleUpdate }).catch(() => null);
+                    const entry = audit?.entries?.first();
+                    const isSelfOrOnboarding = entry && entry.target?.id === newMember.id && entry.executor?.id === newMember.id && (Date.now() - entry.createdTimestamp < 15000);
+
+                    // If assigned by the user themselves (Discord Onboarding prompt / self-assign), revoke it immediately!
+                    if (isSelfOrOnboarding) {
+                        await newMember.roles.remove(wlRoleId, 'Unauthorized: Whitelist role is only granted via official Whitelist Embed reaction').catch(() => null);
+                        console.warn(`🛡️ [Whitelist Guard] Stripped unauthorized Whitelist role from ${newMember.user.tag} (Assigned via Onboarding/Self without embed reaction).`);
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('Whitelist guard error:', err.message);
         }
     });
 }
