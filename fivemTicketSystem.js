@@ -1416,79 +1416,85 @@ function setupReactionHandlers(client) {
             const message = reaction.message;
             if (!message || !message.guild) return;
 
-            const isWhitelistMsg = message.embeds.some(e => e.title && e.title.toLowerCase().includes('whitelist')) ||
-                message.components.some(row => row.components && row.components.some(c => c.customId === 'verify_whitelist'));
-            const emojiName = reaction.emoji.name;
+            // Whitelist role is ONLY granted via ✅ reaction on the official Whitelist Embed
+            if (reaction.emoji.name !== '✅') return;
 
-            if (isWhitelistMsg && (emojiName === '✅' || emojiName === '🛡️' || emojiName === '⚔️')) {
-                const roleId = getWhitelistRoleId();
-                const member = await message.guild.members.fetch(user.id).catch(() => null);
-                if (!member) return;
+            const whitelistChanId = config.whitelist?.channelId || "1557102764734152894";
+            const panels = loadWhitelistPanels();
+            const isDedicatedWhitelistEmbed =
+                (config.whitelist?.messageId && message.id === config.whitelist.messageId) ||
+                panels.some(p => p.messageId === message.id) ||
+                (message.channelId === whitelistChanId && message.embeds.some(e => e.title && e.title.toLowerCase().includes('whitelist')));
 
-                await syncBansFromFiveM(client).catch(() => { });
-                const bans = loadNxBans();
-                const nowEpoch = Math.floor(Date.now() / 1000);
-                const activeBan = bans.find(b =>
-                    b.discordId === user.id &&
-                    b.status === 'ACTIVE' &&
-                    (b.isPermanent || !b.expireEpoch || b.expireEpoch > nowEpoch)
-                );
+            if (!isDedicatedWhitelistEmbed) return;
 
-                if (activeBan) {
-                    await reaction.users.remove(user.id).catch(() => { });
-                    const banRoleId = getBanRoleId();
-                    if (banRoleId && !member.roles.cache.has(banRoleId)) {
-                        await member.roles.add(banRoleId, `Auto-Blacklist: Tried to claim whitelist while banned (${activeBan.banId})`).catch(() => { });
-                    }
-                    if (member.roles.cache.has(roleId)) {
-                        await member.roles.remove(roleId, 'Banned player cannot hold Whitelist role').catch(() => { });
-                    }
+            const roleId = getWhitelistRoleId();
+            const member = await message.guild.members.fetch(user.id).catch(() => null);
+            if (!member) return;
 
-                    try {
-                        await user.send({
-                            embeds: [
-                                new EmbedBuilder()
-                                    .setColor(0xE74C3C)
-                                    .setTitle('⛔ Access Denied — You are Blacklisted')
-                                    .setDescription(
-                                        `You cannot claim the **Whitelist** role because you have an active ban on **Hypershot Arena**.\n\n` +
-                                        `🏷️ **Ban ID:** \`${activeBan.banId}\`\n` +
-                                        `⚠️ **Reason:** ${activeBan.reason || 'Rule violation'}\n` +
-                                        `⏳ **Duration:** ${activeBan.duration || 'Permanent'}`
-                                    )
-                                    .setFooter({ text: "Hypershot Arena Security" })
-                                    .setTimestamp()
-                            ]
-                        }).catch(() => { });
-                    } catch (e) { }
-                    return;
+            await syncBansFromFiveM(client).catch(() => { });
+            const bans = loadNxBans();
+            const nowEpoch = Math.floor(Date.now() / 1000);
+            const activeBan = bans.find(b =>
+                b.discordId === user.id &&
+                b.status === 'ACTIVE' &&
+                (b.isPermanent || !b.expireEpoch || b.expireEpoch > nowEpoch)
+            );
+
+            if (activeBan) {
+                await reaction.users.remove(user.id).catch(() => { });
+                const banRoleId = getBanRoleId();
+                if (banRoleId && !member.roles.cache.has(banRoleId)) {
+                    await member.roles.add(banRoleId, `Auto-Blacklist: Tried to claim whitelist while banned (${activeBan.banId})`).catch(() => { });
+                }
+                if (member.roles.cache.has(roleId)) {
+                    await member.roles.remove(roleId, 'Banned player cannot hold Whitelist role').catch(() => { });
                 }
 
-                if (!member.roles.cache.has(roleId)) {
-                    await member.roles.add(roleId).catch(console.error);
+                try {
+                    await user.send({
+                        embeds: [
+                            new EmbedBuilder()
+                                .setColor(0xE74C3C)
+                                .setTitle('⛔ Access Denied — You are Blacklisted')
+                                .setDescription(
+                                    `You cannot claim the **Whitelist** role because you have an active ban on **Hypershot Arena**.\n\n` +
+                                    `🏷️ **Ban ID:** \`${activeBan.banId}\`\n` +
+                                    `⚠️ **Reason:** ${activeBan.reason || 'Rule violation'}\n` +
+                                    `⏳ **Duration:** ${activeBan.duration || 'Permanent'}`
+                                )
+                                .setFooter({ text: "Hypershot Arena Security" })
+                                .setTimestamp()
+                        ]
+                    }).catch(() => { });
+                } catch (e) { }
+                return;
+            }
 
-                    try {
-                        const tempMsg = await message.channel.send({
-                            content: `<@${user.id}> 🎉 **Congratulations!** You have received the **Whitelist** role and can now join Hypershot Arena!`
-                        }).catch(() => null);
-                        if (tempMsg) setTimeout(() => tempMsg.delete().catch(() => { }), 6000);
-                    } catch (e) { }
+            if (!member.roles.cache.has(roleId)) {
+                await member.roles.add(roleId, 'Whitelist role granted via official Whitelist Embed reaction').catch(console.error);
 
-                    const logChanId = config.tickets?.whitelistLogChannelId || config.tickets?.logChannelId;
-                    const logChan = message.guild.channels.cache.get(logChanId);
-                    if (logChan) {
-                        const logEmbed = new EmbedBuilder()
-                            .setTitle('✅ Whitelist Role Granted (Reaction)')
-                            .setColor(0x2ECC71)
-                            .setTimestamp()
-                            .addFields(
-                                { name: '👤 User', value: `<@${user.id}> (${user.tag})`, inline: true },
-                                { name: '🆔 User ID', value: `\`${user.id}\``, inline: true },
-                                { name: '⚡ Method', value: `Reacted with ${emojiName}`, inline: true }
-                            )
-                            .setThumbnail(user.displayAvatarURL ? user.displayAvatarURL({ dynamic: true }) : null);
-                        await logChan.send({ embeds: [logEmbed] }).catch(() => { });
-                    }
+                try {
+                    const tempMsg = await message.channel.send({
+                        content: `<@${user.id}> 🎉 **Congratulations!** You have received the **Whitelist** role and can now join Hypershot Arena!`
+                    }).catch(() => null);
+                    if (tempMsg) setTimeout(() => tempMsg.delete().catch(() => { }), 6000);
+                } catch (e) { }
+
+                const logChanId = config.tickets?.whitelistLogChannelId || config.tickets?.logChannelId;
+                const logChan = message.guild.channels.cache.get(logChanId);
+                if (logChan) {
+                    const logEmbed = new EmbedBuilder()
+                        .setTitle('✅ Whitelist Role Granted (Reaction)')
+                        .setColor(0x2ECC71)
+                        .setTimestamp()
+                        .addFields(
+                            { name: '👤 User', value: `<@${user.id}> (${user.tag})`, inline: true },
+                            { name: '🆔 User ID', value: `\`${user.id}\``, inline: true },
+                            { name: '⚡ Method', value: 'Reacted with ✅ on Whitelist Embed', inline: true }
+                        )
+                        .setThumbnail(user.displayAvatarURL ? user.displayAvatarURL({ dynamic: true }) : null);
+                    await logChan.send({ embeds: [logEmbed] }).catch(() => { });
                 }
             }
         } catch (err) {
@@ -1505,38 +1511,44 @@ function setupReactionHandlers(client) {
             const message = reaction.message;
             if (!message || !message.guild) return;
 
-            const isWhitelistMsg = message.embeds.some(e => e.title && e.title.toLowerCase().includes('whitelist')) ||
-                message.components.some(row => row.components && row.components.some(c => c.customId === 'verify_whitelist'));
-            const emojiName = reaction.emoji.name;
+            if (reaction.emoji.name !== '✅') return;
 
-            if (isWhitelistMsg && (emojiName === '✅' || emojiName === '🛡️' || emojiName === '⚔️')) {
-                const roleId = getWhitelistRoleId();
-                const member = await message.guild.members.fetch(user.id).catch(() => null);
+            const whitelistChanId = config.whitelist?.channelId || "1557102764734152894";
+            const panels = loadWhitelistPanels();
+            const isDedicatedWhitelistEmbed =
+                (config.whitelist?.messageId && message.id === config.whitelist.messageId) ||
+                panels.some(p => p.messageId === message.id) ||
+                (message.channelId === whitelistChanId && message.embeds.some(e => e.title && e.title.toLowerCase().includes('whitelist')));
 
-                if (member && member.roles.cache.has(roleId)) {
-                    await member.roles.remove(roleId).catch(console.error);
+            if (!isDedicatedWhitelistEmbed) return;
 
-                    try {
-                        const tempMsg = await message.channel.send({
-                            content: `<@${user.id}> ❌ Your **Whitelist** role has been removed.`
-                        }).catch(() => null);
-                        if (tempMsg) setTimeout(() => tempMsg.delete().catch(() => { }), 5000);
-                    } catch (e) { }
+            const roleId = getWhitelistRoleId();
+            const member = await message.guild.members.fetch(user.id).catch(() => null);
 
-                    const logChanId = config.tickets?.whitelistLogChannelId || config.tickets?.logChannelId;
-                    const logChan = message.guild.channels.cache.get(logChanId);
-                    if (logChan) {
-                        const logEmbed = new EmbedBuilder()
-                            .setTitle('❌ Whitelist Role Removed (Reaction Removed)')
-                            .setColor(0xED4245)
-                            .setTimestamp()
-                            .addFields(
-                                { name: '👤 User', value: `<@${user.id}> (${user.tag})`, inline: true },
-                                { name: '🆔 User ID', value: `\`${user.id}\``, inline: true }
-                            )
-                            .setThumbnail(user.displayAvatarURL ? user.displayAvatarURL({ dynamic: true }) : null);
-                        await logChan.send({ embeds: [logEmbed] }).catch(() => { });
-                    }
+            if (member && member.roles.cache.has(roleId)) {
+                await member.roles.remove(roleId, 'Whitelist reaction removed from official embed').catch(console.error);
+
+                try {
+                    const tempMsg = await message.channel.send({
+                        content: `<@${user.id}> ❌ Your **Whitelist** role has been removed.`
+                    }).catch(() => null);
+                    if (tempMsg) setTimeout(() => tempMsg.delete().catch(() => { }), 5000);
+                } catch (e) { }
+
+                const logChanId = config.tickets?.whitelistLogChannelId || config.tickets?.logChannelId;
+                const logChan = message.guild.channels.cache.get(logChanId);
+                if (logChan) {
+                    const logEmbed = new EmbedBuilder()
+                        .setTitle('❌ Whitelist Role Removed (Reaction Removed)')
+                        .setColor(0xED4245)
+                        .setTimestamp()
+                        .addFields(
+                            { name: '👤 User', value: `<@${user.id}> (${user.tag})`, inline: true },
+                            { name: '🆔 User ID', value: `\`${user.id}\``, inline: true },
+                            { name: '⚡ Reason', value: 'Removed ✅ reaction from Whitelist Embed', inline: true }
+                        )
+                        .setThumbnail(user.displayAvatarURL ? user.displayAvatarURL({ dynamic: true }) : null);
+                    await logChan.send({ embeds: [logEmbed] }).catch(() => { });
                 }
             }
         } catch (err) {

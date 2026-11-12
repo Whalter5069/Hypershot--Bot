@@ -276,14 +276,21 @@ client.on(Events.GuildMemberAdd, async member => {
             if (isBanned) return; // Do not grant normal auto-role or welcome if banned
         } catch (e) { }
 
-        // Auto role
+        // Auto role (Strictly ensure Whitelist role 1557090669338693669 is NEVER granted via Auto Role)
+        const WHITELIST_ROLE_ID = "1557090669338693669";
         if (AUTO_ROLE_ID && member.guild) {
-            try {
-                const role = await member.guild.roles.fetch(AUTO_ROLE_ID).catch(() => null);
-                if (role) await member.roles.add(role);
-                console.log(`🎭 Added role to ${member.user?.tag || member.id}`);
-            } catch (e) {
-                console.error("❌ Role add error:", e.message);
+            if (AUTO_ROLE_ID === WHITELIST_ROLE_ID) {
+                console.warn(`⛔ [AutoRole Blocked] AUTO_ROLE_ID is configured as Whitelist role (${WHITELIST_ROLE_ID}). Whitelist role must ONLY be obtained by reacting on the Whitelist embed!`);
+            } else {
+                try {
+                    const role = await member.guild.roles.fetch(AUTO_ROLE_ID).catch(() => null);
+                    if (role && role.id !== WHITELIST_ROLE_ID) {
+                        await member.roles.add(role);
+                        console.log(`🎭 Added auto-role (${role.name}) to ${member.user?.tag || member.id}`);
+                    }
+                } catch (e) {
+                    console.error("❌ Role add error:", e.message);
+                }
             }
         }
 
