@@ -70,6 +70,14 @@ module.exports = {
             const newBanId = generateNxBanId(bans);
             const currentTime = getBDTimeString();
 
+            const allBanIdentifiers = [
+                ...(txProfile.identifiers || []),
+                ...(txProfile.hwids || [])
+            ];
+            if (!allBanIdentifiers.some(id => id === `discord:${targetUser.id}` || id.includes(targetUser.id))) {
+                allBanIdentifiers.unshift(`discord:${targetUser.id}`);
+            }
+
             const newRecord = {
                 banId: newBanId,
                 discordId: targetUser.id,
@@ -82,28 +90,37 @@ module.exports = {
                 bannedById: author.id,
                 bannedByName: author.tag,
                 status: 'ACTIVE',
-                identifiers: txProfile.identifiers,
+                identifiers: allBanIdentifiers,
+                hwids: txProfile.hwids || [],
                 timestamp: currentTime
             };
 
             bans.unshift(newRecord);
             saveNxBans(bans);
-            await syncBanWithFiveM(targetUser.id, txProfile.name, reason, author.tag, durationInfo.label, txProfile.identifiers);
+            await syncBanWithFiveM(targetUser.id, txProfile.name, reason, author.tag, durationInfo.label, allBanIdentifiers, txProfile.hwids);
 
             // Channel announcement
             const announceChanId = isPermanent ? getBanAnnounceChannelId() : getSuspendedAnnounceChannelId();
             try {
                 const announceChan = interaction.guild?.channels.cache.get(announceChanId) || await client.channels.fetch(announceChanId).catch(() => null);
                 if (announceChan && announceChan.isTextBased()) {
-                    const idList = txProfile.identifiers && txProfile.identifiers.length > 0
-                        ? txProfile.identifiers.join('\n')
-                        : `discord:${targetUser.id}`;
+                    let detailsText = "";
+                    const idItems = (txProfile.identifiers && txProfile.identifiers.length > 0)
+                        ? txProfile.identifiers
+                        : [`discord:${targetUser.id}`];
+
+                    detailsText += "Player Identifiers:\n" + idItems.join('\n');
+
+                    if (txProfile.hwids && txProfile.hwids.length > 0) {
+                        detailsText += "\n\nHardware IDs:\n" + txProfile.hwids.join('\n');
+                    }
+
                     const wlMention = `<@&${wlRoleId}>`;
 
                     if (isPermanent) {
-                        await announceChan.send(`<@${targetUser.id}> You have been permanently banned from Hypershot Arena for ${reason}.\n\n\`\`\`\n${idList}\n\`\`\`\n${wlMention}`);
+                        await announceChan.send(`<@${targetUser.id}> You have been permanently banned from Hypershot Arena for ${reason}.\n\n\`\`\`\n${detailsText}\n\`\`\`\n${wlMention}`);
                     } else {
-                        await announceChan.send(`<@${targetUser.id}> This user has been suspended ${durationInfo.label} for ${reason}.\n\n\`\`\`\n${idList}\n\`\`\`\n${wlMention}`);
+                        await announceChan.send(`<@${targetUser.id}> This user has been suspended ${durationInfo.label} for ${reason}.\n\n\`\`\`\n${detailsText}\n\`\`\`\n${wlMention}`);
                     }
                 }
             } catch (chanErr) { }

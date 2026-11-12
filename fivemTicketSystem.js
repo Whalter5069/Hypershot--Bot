@@ -127,9 +127,9 @@ const restartScheduleFile = path.join(__dirname, 'restart_schedule.json');
 const statusStateFile = path.join(__dirname, 'status_state.json');
 const whitelistCountFile = path.join(__dirname, 'whitelist_count.json');
 const whitelistPanelsFile = path.join(__dirname, 'whitelist_panels.json');
-const localWindowsBansPath = 'e:/TEST/Hypershot Arena/Hypershot AREN 2.0/txData/Qbox_72E1BC.base/resources/[standalone]/HS-whitelist/bans.json';
-const localWindowsTxPath = 'e:/TEST/Hypershot Arena/Hypershot AREN 2.0/txData/default/data/playersDB.json';
-const localWindowsConfigPath = 'e:/TEST/Hypershot Arena/Hypershot AREN 2.0/txData/Qbox_72E1BC.base/resources/[standalone]/HS-whitelist/config.lua';
+const localWindowsBansPath = 'D:/Hypershot Arena/resources/[standalone]/hs-whitelist/bans.json';
+const localWindowsTxPath = 'D:/Hypershot Arena/txData/default/data/playersDB.json';
+const localWindowsConfigPath = 'D:/Hypershot Arena/resources/[standalone]/hs-whitelist/config.lua';
 
 let serverStartTime = null;
 let lastStatusMessage = null;
@@ -613,18 +613,10 @@ function buildWhitelistEmbed(client, localCount = 0) {
         .setImage("https://media.discordapp.net/attachments/1328002952236892180/1560750415945932901/hypershot_arena_animated.gif")
         .setThumbnail(client?.user ? client.user.displayAvatarURL({ dynamic: true }) : null);
 
-    if (localCount > 0) {
-        embed.setFields({ name: '✅ Whitelisted Members', value: `**${localCount}** members`, inline: false });
-        embed.setFooter({
-            text: `Hypershot Arena • ${localCount} Members Whitelisted • React ✅`,
-            iconURL: client?.user ? client.user.displayAvatarURL() : undefined
-        });
-    } else {
-        embed.setFooter({
-            text: "Hypershot Arena • React ✅ for Whitelist",
-            iconURL: client?.user ? client.user.displayAvatarURL() : undefined
-        });
-    }
+    embed.setFooter({
+        text: "Hypershot Arena • React ✅ for Whitelist",
+        iconURL: client?.user ? client.user.displayAvatarURL() : undefined
+    });
 
     return embed;
 }
@@ -652,19 +644,11 @@ async function refreshWhitelistReactors(client, message) {
 
         if (message.author && message.author.id === client.user.id) {
             const embed = EmbedBuilder.from(base);
-            if (count > 0) {
-                embed.setFields({ name: '✅ Whitelisted Members', value: `**${count}** members`, inline: false });
-                embed.setFooter({
-                    text: `Hypershot Arena • ${count} Members Whitelisted • React ✅`,
-                    iconURL: client.user.displayAvatarURL()
-                });
-            } else {
-                embed.setFields([]);
-                embed.setFooter({
-                    text: "Hypershot Arena • React ✅ for Whitelist",
-                    iconURL: client.user.displayAvatarURL()
-                });
-            }
+            embed.setFields([]);
+            embed.setFooter({
+                text: "Hypershot Arena • React ✅ for Whitelist",
+                iconURL: client.user.displayAvatarURL()
+            });
             await message.edit({ embeds: [embed] }).catch(() => null);
         }
     } catch (e) {
@@ -739,11 +723,12 @@ function getWhitelistRoleId() {
 
 function findNxWhitelistResourcePath() {
     const candidates = [
+        'D:/Hypershot Arena/resources/[standalone]/hs-whitelist',
+        'D:\\Hypershot Arena\\resources\\[standalone]\\hs-whitelist',
         'D:/hs-whitelist',
         'D:/BOT/hs-whitelist',
         'D:/BOT/host pvp/hs-whitelist',
         'D:/BOT/host pvp/HS-whitelist',
-        'e:/TEST/Hypershot Arena/Hypershot AREN 2.0/txData/Qbox_72E1BC.base/resources/[standalone]/HS-whitelist',
         path.join(__dirname, '../nx-whitelist'),
         path.join(__dirname, '..')
     ];
@@ -793,8 +778,9 @@ function getFiveMEndpoints(apiPath = '') {
 
 function findTxDataPlayersDBPath() {
     const candidates = [
+        'D:/Hypershot Arena/txData/default/data/playersDB.json',
+        'D:\\Hypershot Arena\\txData\\default\\data\\playersDB.json',
         localWindowsTxPath,
-        'e:/TEST/Hypershot Arena/Hypershot AREN 2.0/txData/default/data/playersDB.json',
         '/home/container/txData/default/data/playersDB.json'
     ];
     for (const c of candidates) {
@@ -917,13 +903,13 @@ async function sendBanUnbanLogEmbed(client, embed) {
     } catch (e) { }
 }
 
-async function syncBanWithFiveM(discordId, name, reason, bannedBy, duration, identifiers) {
+async function syncBanWithFiveM(discordId, name, reason, bannedBy, duration, identifiers, hwids) {
     const endpoints = getFiveMEndpoints('/HS-whitelist/api/ban');
     try {
         const result = await Promise.any(
             endpoints.map(ep =>
                 axios.post(ep, {
-                    discordId, name, reason, bannedBy, duration, identifiers,
+                    discordId, name, reason, bannedBy, duration, identifiers, hwids,
                     skipAnnounce: true
                 }, { timeout: 4000, validateStatus: s => s < 500 }).then(res => {
                     if (res && res.data && res.data.success) {
@@ -986,14 +972,18 @@ async function syncTeleportWithFiveM(playerId, adminName, adminId, coords) {
 
 async function getPlayerIdentifiersFromTxAdmin(targetDiscordId) {
     let foundIds = [];
+    let foundHwids = [];
     let foundName = null;
 
+    const cleanDiscordId = String(targetDiscordId).replace(/[<@!>]/g, '').trim();
+
+    // 1. Try querying FiveM HTTP API endpoint
     try {
-        const endpoints = getFiveMEndpoints(`/HS-whitelist/api/player-profile?discordId=${targetDiscordId}`);
+        const endpoints = getFiveMEndpoints(`/HS-whitelist/api/player-profile?discordId=${cleanDiscordId}`);
         const result = await Promise.any(
             endpoints.map(ep =>
                 axios.get(ep, { timeout: 3500, validateStatus: s => s < 500 }).then(res => {
-                    if (res && res.data && res.data.identifiers && res.data.identifiers.length > 0) {
+                    if (res && res.data && res.data.success) {
                         return res.data;
                     }
                     throw new Error('no result');
@@ -1001,12 +991,20 @@ async function getPlayerIdentifiersFromTxAdmin(targetDiscordId) {
             )
         );
         if (result) {
-            foundIds = result.identifiers;
-            if (result.name && !result.name.includes('Discord User (')) foundName = result.name;
+            if (Array.isArray(result.identifiers) && result.identifiers.length > 0) {
+                foundIds = result.identifiers;
+            }
+            if (Array.isArray(result.hwids) && result.hwids.length > 0) {
+                foundHwids = result.hwids;
+            }
+            if (result.name && !result.name.includes('Discord User (')) {
+                foundName = result.name;
+            }
         }
     } catch (e) { }
 
-    if (foundIds.length === 0) {
+    // 2. Query txAdmin playersDB.json directly (covers all online and offline players who ever joined)
+    if (foundIds.length === 0 || foundHwids.length === 0) {
         try {
             const txPath = findTxDataPlayersDBPath();
             if (txPath && fs.existsSync(txPath)) {
@@ -1014,9 +1012,10 @@ async function getPlayerIdentifiersFromTxAdmin(targetDiscordId) {
                 const data = JSON.parse(raw);
                 if (data.players && Array.isArray(data.players)) {
                     for (const player of data.players) {
-                        if (player.ids && Array.isArray(player.ids) && player.ids.some(id => id.includes(targetDiscordId))) {
-                            foundIds = player.ids;
-                            foundName = player.displayName;
+                        if (player.ids && Array.isArray(player.ids) && player.ids.some(id => id.includes(cleanDiscordId))) {
+                            if (foundIds.length === 0) foundIds = [...player.ids];
+                            if (foundHwids.length === 0 && Array.isArray(player.hwids)) foundHwids = [...player.hwids];
+                            if (!foundName && player.displayName) foundName = player.displayName;
                             break;
                         }
                     }
@@ -1025,15 +1024,38 @@ async function getPlayerIdentifiersFromTxAdmin(targetDiscordId) {
         } catch (e) { }
     }
 
-    if (foundIds.length === 0) {
-        foundIds = [`discord:${targetDiscordId}`];
-    } else if (!foundIds.some(id => id.includes(targetDiscordId))) {
-        foundIds.push(`discord:${targetDiscordId}`);
+    // 3. Fallback: Check players_history.json in hs-whitelist
+    if (foundIds.length === 0 || foundHwids.length === 0) {
+        try {
+            const histPaths = [
+                'D:/Hypershot Arena/resources/[standalone]/hs-whitelist/players_history.json',
+                path.join(findNxWhitelistResourcePath() || '', 'players_history.json')
+            ];
+            for (const hp of histPaths) {
+                if (hp && fs.existsSync(hp)) {
+                    const histData = JSON.parse(fs.readFileSync(hp, 'utf8'));
+                    if (histData && histData[cleanDiscordId]) {
+                        const rec = histData[cleanDiscordId];
+                        if (foundIds.length === 0 && rec.identifiers && Array.isArray(rec.identifiers)) foundIds = [...rec.identifiers];
+                        if (foundHwids.length === 0 && rec.hwids && Array.isArray(rec.hwids)) foundHwids = [...rec.hwids];
+                        if (!foundName && rec.name) foundName = rec.name;
+                        break;
+                    }
+                }
+            }
+        } catch (e) { }
+    }
+
+    // Guarantee discord:<id> is in identifiers
+    const discordTag = `discord:${cleanDiscordId}`;
+    if (!foundIds.some(id => id === discordTag || id.includes(cleanDiscordId))) {
+        foundIds.unshift(discordTag);
     }
 
     return {
         identifiers: foundIds,
-        name: foundName || `Player (${targetDiscordId})`
+        hwids: foundHwids,
+        name: foundName || `Player (${cleanDiscordId})`
     };
 }
 

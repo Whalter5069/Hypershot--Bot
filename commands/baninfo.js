@@ -26,9 +26,21 @@ module.exports = {
             return interaction.editReply({ content: `❌ No ban record found for \`${targetInput}\`.` });
         }
 
-        const idList = record.identifiers && record.identifiers.length > 0
-            ? record.identifiers.slice(0, 8).join('\n')
-            : 'None captured';
+        let idList = '';
+        const regularIds = record.identifiers ? record.identifiers.filter(id => !id.match(/^[0-9]:/)) : [];
+        const hwIds = (record.hwids && record.hwids.length > 0) 
+            ? record.hwids 
+            : (record.identifiers ? record.identifiers.filter(id => id.match(/^[0-9]:/)) : []);
+
+        if (regularIds.length > 0) {
+            idList += 'Player Identifiers:\n' + regularIds.slice(0, 8).join('\n');
+        }
+        if (hwIds.length > 0) {
+            idList += (idList ? '\n\n' : '') + 'Hardware IDs:\n' + hwIds.slice(0, 8).join('\n');
+        }
+        if (!idList) {
+            idList = 'None captured';
+        }
 
         const embed = new EmbedBuilder()
             .setTitle(`🔍 Ban Record: ${record.banId || 'N/A'}`)
