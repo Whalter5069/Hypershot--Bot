@@ -622,8 +622,9 @@ function buildWhitelistEmbed(client, localCount = 0) {
 }
 
 let isWhitelistInitializing = false;
+let activeWhitelistMessageId = null;
 
-async function initOrUpdateWhitelistPanel(client) {
+async function initOrUpdateWhitelistPanel(client, isPeriodicCheck = false) {
     if (!client || !client.isReady()) return;
     if (isWhitelistInitializing) return;
     isWhitelistInitializing = true;
@@ -637,23 +638,24 @@ async function initOrUpdateWhitelistPanel(client) {
             try {
                 channel = await client.channels.fetch(targetChannelId);
             } catch (err) {
-                console.warn(`⚠️ [Whitelist] Could not fetch channel ${targetChannelId}:`, err.message);
+                if (!isPeriodicCheck) console.warn(`⚠️ [Whitelist] Could not fetch channel ${targetChannelId}:`, err.message);
                 return;
             }
         }
 
         if (!channel || !channel.isTextBased()) {
-            console.warn(`⚠️ [Whitelist] Channel ${targetChannelId} is not a valid text channel.`);
+            if (!isPeriodicCheck) console.warn(`⚠️ [Whitelist] Channel ${targetChannelId} is not a valid text channel.`);
             return;
         }
 
         let existingMsg = null;
+        const msgIdToFetch = activeWhitelistMessageId || config.whitelist?.messageId;
 
-        // 1. Check configured messageId if already stored
-        if (config.whitelist?.messageId) {
+        // 1. Check configured / cached messageId
+        if (msgIdToFetch) {
             try {
-                existingMsg = channel.messages.cache.get(config.whitelist.messageId) ||
-                    await channel.messages.fetch(config.whitelist.messageId).catch(() => null);
+                existingMsg = channel.messages.cache.get(msgIdToFetch) ||
+                    await channel.messages.fetch(msgIdToFetch).catch(() => null);
             } catch (e) {
                 existingMsg = null;
             }
@@ -692,26 +694,28 @@ async function initOrUpdateWhitelistPanel(client) {
         const embed = buildWhitelistEmbed(client);
 
         if (existingMsg) {
-            // NEVER DELETE! Simply edit/update if authored by this bot
-            if (existingMsg.author && existingMsg.author.id === client.user.id) {
-                await existingMsg.edit({ embeds: [embed] }).catch(() => null);
-            }
-
-            // Ensure reaction is preserved
-            const hasCheck = existingMsg.reactions.cache.some(r => r.emoji.name === '✅' && r.me);
-            if (!hasCheck) {
-                await existingMsg.react('✅').catch(() => null);
-            }
-
+            activeWhitelistMessageId = existingMsg.id;
             trackWhitelistPanel(existingMsg);
             if (config.whitelist) {
                 config.whitelist.messageId = existingMsg.id;
             }
-            console.log(`✅ [Whitelist] Preserved and connected to existing whitelist panel (${existingMsg.id}) in #${channel.name}`);
+
+            // Only edit on initial startup check, never spam edit on periodic loop
+            if (!isPeriodicCheck) {
+                if (existingMsg.author && existingMsg.author.id === client.user.id) {
+                    await existingMsg.edit({ embeds: [embed] }).catch(() => null);
+                }
+                const hasCheck = existingMsg.reactions.cache.some(r => r.emoji.name === '✅' && r.me);
+                if (!hasCheck) {
+                    await existingMsg.react('✅').catch(() => null);
+                }
+                console.log(`✅ [Whitelist] Connected to existing whitelist panel (${existingMsg.id}) in #${channel.name}`);
+            }
         } else {
             // Absolutely no whitelist message exists in this channel -> Send fresh one
             const newMsg = await channel.send({ embeds: [embed] });
             await newMsg.react('✅').catch(() => null);
+            activeWhitelistMessageId = newMsg.id;
             trackWhitelistPanel(newMsg);
             if (config.whitelist) {
                 config.whitelist.messageId = newMsg.id;
@@ -722,7 +726,7 @@ async function initOrUpdateWhitelistPanel(client) {
             console.log(`✅ [Whitelist] Sent fresh whitelist panel (${newMsg.id}) in #${channel.name}`);
         }
     } catch (err) {
-        console.error('❌ [Whitelist] Error in initOrUpdateWhitelistPanel:', err);
+        if (!isPeriodicCheck) console.error('❌ [Whitelist] Error in initOrUpdateWhitelistPanel:', err);
     } finally {
         isWhitelistInitializing = false;
     }
@@ -748,16 +752,6 @@ async function refreshWhitelistReactors(client, message) {
                 updatedAt: new Date().toISOString()
             }, null, 2), 'utf8');
         } catch (e) { }
-
-        if (message.author && message.author.id === client.user.id) {
-            const embed = EmbedBuilder.from(base);
-            embed.setFields([]);
-            embed.setFooter({
-                text: "Hypershot Arena • React ✅ for Whitelist",
-                iconURL: client.user.displayAvatarURL()
-            });
-            await message.edit({ embeds: [embed] }).catch(() => null);
-        }
     } catch (e) {
         console.error('refreshWhitelistReactors error:', e.message);
     }
@@ -2138,10 +2132,10 @@ function initFivemTicketSystem(client) {
     setInterval(async () => {
         if (!client.isReady()) return;
         try {
-            await initOrUpdateWhitelistPanel(client).catch(() => null);
+            await initOrUpdateWhitelistPanel(client, true).catch(() => null);
             await refreshAllTrackedPanels(client).catch(() => null);
         } catch (e) { }
-    }, 15000);
+    }, 60000);
 
     // Setup HTTP servers
     startHttpServers(client);
